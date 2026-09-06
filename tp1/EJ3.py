@@ -1,107 +1,211 @@
 import pandas as pd
+import matplotlib.pyplot as plt
 
 # X: Personas de entre 40 y 45 años
-# c: Persona de entre 10 y 45 años a la que se le OTORGA el préstamo
+# c: Persona de entre 40 y 45 años a la que se le OTORGA el préstamo
 # h(x) = OTORGADO -> h([h_sexo, h_educacion, h_estado, h_prestamos])
 
 # Cargar datos del csv
 data = pd.read_csv('Préstamo.csv')
 data.columns = data.columns.str.strip()
 
-# Filtrar para personas de 50 años y seleccionar características
+# Filtrar para personas de entre 40 y 45 años
 data_filtrada = data[(data['Edad'] >= 40) & (data['Edad'] <= 45)].copy()
 
 atributos = ['Sexo', 'Mayor nivel educativo', 'Estado de vivienda', 'Préstamos previos impagos']
 atributo_concepto = 'Estado'
 
+# Limpiar filas con nulos en estas columnas
+data_clean = data_filtrada[atributos + [atributo_concepto]].dropna()
+
 PORCENTAJE_ENTRENAMIENTO = 0.80
 
-# Partimos el set de datos en 80/20
-index_corte = int(len(data_filtrada) * PORCENTAJE_ENTRENAMIENTO)
+# Mezclar y extraer el 80% de los datos para entrenamiento de forma aleatoria
+set_entrenamiento = data_clean.sample(frac=PORCENTAJE_ENTRENAMIENTO, random_state=42)
 
-# Mezclar y extraer el 80% de los datos para entrenamiento
-set_entrenamiento = data_filtrada.sample(frac=PORCENTAJE_ENTRENAMIENTO, random_state=42)
+# El set de prueba es el resto del dataset (20%)
+set_prueba = data_clean.drop(set_entrenamiento.index)
 
-# random_state -> Seed para que sea reproducible, si no se pone, cada vez que se corre el programa va a dar un resultado distinto
+print(f"Ejemplos totales (40-45 años): {len(data_clean)}")
+print(f"Ejemplos de entrenamiento (80%): {len(set_entrenamiento)}")
+print(f"Ejemplos de prueba (20%): {len(set_prueba)}")
 
-# El set  de prueba es el resto del dataset 
-set_prueba = data_filtrada.drop(set_entrenamiento.index)
 
-print(f"Ejemplos totales (50 años): {len(data_filtrada)}")
-print(f"Ejemplos de entrenamiento: {len(set_entrenamiento)}")
-print(f"Ejemplos de prueba: {len(set_prueba)}")
+# ENTRENAMIENTO MANUAL DE NAIVE BAYES
 
-# FIND-S
-def find_s(X_ejemplos, y_conceptos, concepto_positivo):
-    # Arranca todo en vacio
-    hipotesis = [None] * len(X_ejemplos.columns) #Vacio en todas las caracteristicas
+# ESPACIO MUESTRAL = [RECHAZADO, OTORGADO]
+# P(R) = RECHAZADO / TOTAL
+# P(O) = OTORGADO / TOTAL
+# R ∩ O = VACIO -> MUTUAMENTE EXCLUYENTES
+
+print("ENTRENAMIETO DEL MODELO")
+print("\nDatos usados para entrenamiento de Naive Bayes:") 
+print(f"Total de ejemplos: N = {len(set_entrenamiento)}")
+print(f"Cantidad de atributos: d = {len(atributos)}")
+print(f"Cantidad de clases: K =  2 (OTORGADO, RECHAZADO)")
+
+# Valores unicos que puede obtener cada atributo (Mj)
+atributos_valores_unicos = {}
+for col in atributos:
+    atributos_valores_unicos[col] = list(data_clean[col].unique())
+
+print("\nCantidad de posibles valores de los atributos:")
+for index, (col, vals) in enumerate(atributos_valores_unicos.items()):
+    print(f"M{index} = {len(vals)} ({col}) -> {vals}")
+
+clases = ['OTORGADO', 'RECHAZADO']
+total_ejemplos_entrenamiento = len(set_entrenamiento)
+
+# Total de ejemplos para cada clase
+total_otorgados = set_entrenamiento[atributo_concepto].value_counts().to_dict().get('OTORGADO', 0)
+total_rechazados = set_entrenamiento[atributo_concepto].value_counts().to_dict().get('RECHAZADO', 0)
+
+# Probabilidades a priori de cada clase
+def priori(cantidad, total):
+    return (cantidad) / (total)
+
+def priori_suavizado(cantidad, total, total_clases, l=1):
+    numerador = cantidad + l
+    denominador = total + (l * total_clases)
+    return numerador / denominador
+
+prioris = {}
+prioris["OTORGADO"] = priori(total_otorgados, total_ejemplos_entrenamiento)
+prioris["RECHAZADO"] = priori(total_rechazados, total_ejemplos_entrenamiento)
+
+print("\nProbabilidades a prori:")
+print(f"P(OTROGADO) = {total_otorgados} / {total_ejemplos_entrenamiento}  = {prioris['OTORGADO']:.2f}")
+print(f"P(RECHAZADO) = {total_rechazados} / {total_ejemplos_entrenamiento} = {prioris['RECHAZADO']:.2f}")
+
+# Verosimilitudes con lapace
+
+# Separar los ejemplos segun cada clase
+#ejemplos_otorgados = set_entrenamiento[set_entrenamiento[atributo_concepto] == 'OTORGADO']
+#ejemplos_rechazados = set_entrenamiento[set_entrenamiento[atributo_concepto] == 'RECHAZADO']
+
+def verosimilitud_suavizada(df, clase, columna, valor, Mj, l=1):
+    #df: dataframe (ejemplos)
+    #clase: la clase a buscar
+    #columna: columna a evaluar
+    #valor: valor que buscamos en el df
+    #Mj: cantidad de valores únicos q
+    #l: suavizado (1)
+  
+    # (Xj = xjm ^ Y = Ck) + l
+    casos_favorables = ((df[columna] == valor) & (df[atributo_concepto] == clase)).sum()
+    numerador = casos_favorables + l
     
-    # Convertimos los datos a listas para poder iterar sobre ellos
-    lista_ejemplos = X_ejemplos.values.tolist()
-    lista_conceptos = y_conceptos.tolist()
+    # (Y = Ck) + l
+    total_clase = (df[atributo_concepto] == clase).sum()
+    denominador = total_clase + (l * Mj)
     
-    for i in range(len(lista_ejemplos)): #Iteramos sobre los ejemplos para ir definiendo la hipotesis
-        # Solo usamos los positivos (OTORGADO en este caso)
-        if lista_conceptos[i] == concepto_positivo:
-            #Tratamos con el ejemplo seleccionado
-            x_ejemplo = lista_ejemplos[i]
-            for j in range(len(hipotesis)):
-                if hipotesis[j] is None: #Si esta vacio y cumplio, nos quedamos con el atributo del ejemplo
-                    hipotesis[j] = x_ejemplo[j]
-                elif hipotesis[j] != x_ejemplo[j]: #Si cumplio y no es el atibuto del ejemplo, podemos generalizar
-                    hipotesis[j] = "?" 
-                    
-    return hipotesis
+    return numerador / denominador
 
-#Set de entrenamiento separado en atributos y objetivo
-X_entrenamiento_caracteristicas = set_entrenamiento[atributos]
-X_entrenamiento_objetivo = set_entrenamiento[atributo_concepto]
+verosimilitudes = {
+    "OTORGADO": {},
+    "RECHAZADO": {}
+}
 
-h_final = find_s(X_entrenamiento_caracteristicas, X_entrenamiento_objetivo, concepto_positivo="OTORGADO")
+for clase in clases:
+    for col in atributos:
+        verosimilitudes[clase][col] = {}
+        cantidad_valores_unicos = len(atributos_valores_unicos[col])
+        for valor in atributos_valores_unicos[col]:
+            prob= verosimilitud_suavizada(
+                df=set_entrenamiento, 
+                clase=clase, 
+                columna=col, 
+                valor=valor, 
+                Mj=cantidad_valores_unicos, 
+                l=1
+            )
+            verosimilitudes[clase][col][valor] = prob
 
-print("Hipótesis más específica obtenida:")
-for campo, valor in zip(atributos, h_final):
-    print(f"- {campo}: {valor}")
-print()
-
-# Predicción en el conjunto de prueba
-def predecir_find_s(hipotesis, X_prueba, campo_positivo, campo_negativo):
-
-    predicciones = []
-
-    for ejemplo in X_prueba:
-        match = True
-        for j in range(len(hipotesis)):
-            # Si la caracterisitca comparada no es general ni coincide con el ejemplo, no califica
-            if hipotesis[j] != '?' and hipotesis[j] != ejemplo[j]:
-                match = False
-                break
-
-        #Vamos agregando las predicciones a la lista
-        if match:
-            predicciones.append(campo_positivo)
-        else:
-            predicciones.append(campo_negativo)
-            
-    return predicciones
-
-# Separar los atributos y predecir
-X_prueba_caracteristicas = set_prueba[atributos].values.tolist()
-X_prueba_objetivo = set_prueba[atributo_concepto].tolist()
-cantidad_ejemplos_prueba = len(set_prueba)
-
-lista_predicciones = predecir_find_s(h_final, X_prueba_caracteristicas, campo_positivo="OTORGADO", campo_negativo="RECHAZADO")
+# Mostrar comparacion de verosimilitudes
+def mostrar_verosimilitudes():
+    print("\nVerosimilitudes calculadas con suavizado de Laplace:")
+    for clase, atributos_dict in verosimilitudes.items():
+        print(f"\n[ CLASE: {clase} ]")
+        for col, valores_dict in atributos_dict.items():
+            print(f"  Atributo: '{col}'")
+            for val, prob in valores_dict.items():
+                # Formateamos con la notación formal P(Atributo = Valor | Clase)
+                print(f"    P({col} = '{val}' | {clase}) = {prob:.4f}")
 
 
-# Calcular aciertos y accuracy
+# Predecir UN ejemplo con Naive Bayes
+def predecir_ejemplo_bayes(ejemplo, prioris, verosimilitudes, atributos):
+    """
+    ejemplo: ejemplo de prueba (lista de valores de atributos)
+    prioris: Diccionario con las probabilidades a priori de cada clase
+    verosimilitudes: El diccionario de verosimilitudes_modelo que ya calculamos
+    atributos: Lista con los nombres de las columnas de atributos
+    """
+    #scores de las clases
+    score_otorgado = prioris['OTORGADO']
+    score_rechazado = prioris['RECHAZADO']
+    
+    # Multiplicamos las verosimilitudes de cada atributo para cada clase
+    for i in range(len(atributos)):
+        columna = atributos[i]
+        valor = ejemplo[i]
+        
+        # P(Atributo = Valor | OTORGADO)
+        prob_cond_otorgado = verosimilitudes['OTORGADO'][columna][valor]
+        score_otorgado *= prob_cond_otorgado
+        
+        # P(Atributo = Valor | RECHAZADO)
+        prob_cond_rechazado = verosimilitudes['RECHAZADO'][columna][valor]
+        score_rechazado *= prob_cond_rechazado
+        
+    # argmax para determinar la clase con mayor score
+    if score_otorgado >= score_rechazado:
+        prediccion = 'OTORGADO'
+    else:
+        prediccion = 'RECHAZADO'
+        
+    # Normalización bayesiana para obtener la probabilidad exacta de 'OTORGADO'
+    # P(OTORGADO | x) = Score(OTORGADO) / (Score(OTORGADO) + Score(RECHAZADO))
+    prob_otorgado = score_otorgado / (score_otorgado + score_rechazado)
+    
+    return prediccion, prob_otorgado
+
+mostrar_verosimilitudes()
+
+prioris_modelo = {
+    'OTORGADO': prioris['OTORGADO'],
+    'RECHAZADO': prioris['RECHAZADO']
+}
+
+lista_predicciones = []
+probabilidades_test = []
+
+# Hacemos las predicciones para cada ejemplo del set de prueba
+for x in set_prueba[atributos].values.tolist():
+    prediccion, probabilidad_posicion = predecir_ejemplo_bayes(
+        ejemplo=x,
+        prioris=prioris_modelo,
+        verosimilitudes=verosimilitudes, 
+        atributos=atributos
+    )
+    
+    lista_predicciones.append(prediccion)
+    probabilidades_test.append(probabilidad_posicion)
+
+# Contamos las preddicciones correctas
 bien = 0
-for i in range(cantidad_ejemplos_prueba):
-    if lista_predicciones[i] == X_prueba_objetivo[i]:
+valores_reales = set_prueba[atributo_concepto].tolist()
+
+for i in range(len(set_prueba)):
+    if lista_predicciones[i] == valores_reales[i]:
         bien += 1
 
-accuracy = bien / cantidad_ejemplos_prueba
+accuracy = bien / len(set_prueba)
 
-print(f"Aciertos: {bien} / {cantidad_ejemplos_prueba}")
+print("TESTEO DEL MODELO")
+
+print("\n Metricas de Naive Bayes en el set de prueba:")
+print(f"Aciertos: {bien} / {len(set_prueba)}")
 print(f"Accuracy en Test: {accuracy * 100:.2f}%")
 
 # (2)
@@ -172,8 +276,83 @@ print(f"Tasa de Verdaderos Positivos (TPR): {tpr * 100:.2f}%")
 fpr = matriz['FP'] / (matriz['FP'] + matriz['TN'])
 print(f"Tasa de Falsos Positivos (FPR): {fpr * 100:.2f}%")  
 
-# Espacio ROC
-print(f"Espacio ROC: ({tpr}, {fpr})%")  
+#Curva ROC
+P = valores_reales.count("OTORGADO")
+N = valores_reales.count("RECHAZADO")
+puntos_fpr = [0.0]  # Arrancamos en el punto (0,0) (Umbral u > 1.0) [1]
+puntos_tpr = [0.0]
+umbrales_unicos = sorted(list(set(probabilidades_test)), reverse=True)
 
-print(f"Espacio ROC: ({tpr}, {fpr})%")  
+# Iteramos por cada umbral para calcular su matriz de confusión y sus tasas [1, 3-6]
+for u in umbrales_unicos:
+    tp = 0
+    fp = 0
+    
+    # Clasificamos cada ejemplo de prueba según el umbral actual "u"
+    for i in range(len(set_prueba)):
+        prob = probabilidades_test[i]
+        real = valores_reales[i]
+        
+        # Si la probabilidad es mayor o igual al umbral, se predice Positivo ('OTORGADO')
+        if prob >= u:
+            if real == "OTORGADO":
+                tp += 1      # Verdadero Positivo
+            else:
+                fp += 1      # Falso Positivo
+                
+    # Calculamos las tasas teóricas correspondientes para este umbral [1, 7]
+    tpr = tp / P if P > 0 else 0.0  # Tasa Verdaderos Positivos (Recall)
+    fpr = fp / N if N > 0 else 0.0  # Tasa Falsos Positivos (1 - Especificidad)
+    
+    puntos_fpr.append(fpr)
+    puntos_tpr.append(tpr)
 
+# Forzamos el último punto en (1,1) (Umbral u = 0.0) [6]
+if puntos_fpr[-1] != 1.0 or puntos_tpr[-1] != 1.0:
+    puntos_fpr.append(1.0)
+    puntos_tpr.append(1.0)
+
+
+
+# Calcular AUC 
+auc = 0.0
+for i in range(1, len(puntos_fpr)):
+    # Ancho del trapecio en el eje X (FPR)
+    base = puntos_fpr[i] - puntos_fpr[i-1]
+    # Altura promedio en el eje Y (TPR)
+    altura_promedio = (puntos_tpr[i] + puntos_tpr[i-1]) / 2.0
+    auc += base * altura_promedio
+
+
+# Graficar la curva ROC y el AUC
+plt.figure(figsize=(7, 6))
+
+# Dibujamos la diagonal de adivinación aleatoria (FPR = TPR, AUC = 0.50) [8, 9]
+plt.plot([10], color='red', linestyle='--', label='Adivinación al Azar (AUC = 0.50)')
+
+# Dibujamos los puntos y la curva ROC de nuestro modelo Naive Bayes [6]
+plt.plot(puntos_fpr, puntos_tpr, color='blue', marker='o', linewidth=2, label=f'Naive Bayes (AUC = {auc:.4f})')
+
+# Rellenamos el área bajo la curva con un color suave para ilustrar el AUC
+plt.fill_between(puntos_fpr, puntos_tpr, color='blue', alpha=0.1)
+
+# Configuramos títulos y etiquetas alineadas a la materia [7]
+plt.xlim([-0.05, 1.05])
+plt.ylim([-0.05, 1.05])
+plt.xlabel('Tasa de Falsos Positivos (FPR) / (1 - Especificidad)')
+plt.ylabel('Tasa de Verdaderos Positivos (TPR) / Recall')
+plt.title('Curva ROC - Naive Bayes (Conjunto de Prueba 40-45 años)')
+plt.grid(True, linestyle=':', alpha=0.6)
+plt.legend(loc='lower right')
+
+# Guardamos el archivo de la imagen y la mostramos
+plt.savefig('curva_roc_test.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+print("\n==============================================")
+print("EVALUACIÓN DEL ESPACIO ROC")
+print("==============================================")
+print(f"Puntos FPR evaluados: {[round(f, 4) for f in puntos_fpr]}")
+print(f"Puntos TPR evaluados: {[round(t, 4) for t in puntos_tpr]}")
+print(f"Área Bajo la Curva ROC (AUC): {auc:.4f}")
+print("==============================================")
