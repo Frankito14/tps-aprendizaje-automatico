@@ -280,7 +280,7 @@ print(f"Tasa de Falsos Positivos (FPR): {fpr * 100:.2f}%")
 #Curva ROC
 P = matriz['TP'] + matriz['FN']  
 N = matriz['TN'] + matriz['FP']  
-puntos_fpr = [0.0]  # Arrancamos en el punto (0,0) (Umbral u > 1.0) [1]
+puntos_fpr = [0.0]  # Arrancamos en el punto (0,0) (Umbral u > 1.0) 
 puntos_tpr = [0.0]
 umbrales_unicos = sorted(list(set(probabilidades_test)), reverse=True)
 
