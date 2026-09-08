@@ -15,18 +15,15 @@ data_filtrada = data[(data['Edad'] >= 40) & (data['Edad'] <= 45)].copy()
 atributos = ['Sexo', 'Mayor nivel educativo', 'Estado de vivienda', 'Préstamos previos impagos']
 atributo_concepto = 'Estado'
 
-# Limpiar filas con nulos en estas columnas
-data_clean = data_filtrada[atributos + [atributo_concepto]].dropna()
-
 PORCENTAJE_ENTRENAMIENTO = 0.80
 
 # Mezclar y extraer el 80% de los datos para entrenamiento de forma aleatoria
-set_entrenamiento = data_clean.sample(frac=PORCENTAJE_ENTRENAMIENTO, random_state=42)
+set_entrenamiento = data_filtrada.sample(frac=PORCENTAJE_ENTRENAMIENTO, random_state=42)
 
 # El set de prueba es el resto del dataset (20%)
-set_prueba = data_clean.drop(set_entrenamiento.index)
+set_prueba = data_filtrada.drop(set_entrenamiento.index)
 
-print(f"Ejemplos totales (40-45 años): {len(data_clean)}")
+print(f"Ejemplos totales (40-45 años): {len(data_filtrada)}")
 print(f"Ejemplos de entrenamiento (80%): {len(set_entrenamiento)}")
 print(f"Ejemplos de prueba (20%): {len(set_prueba)}")
 
@@ -47,7 +44,7 @@ print(f"Cantidad de clases: K =  2 (OTORGADO, RECHAZADO)")
 # Valores unicos que puede obtener cada atributo (Mj)
 atributos_valores_unicos = {}
 for col in atributos:
-    atributos_valores_unicos[col] = list(data_clean[col].unique())
+    atributos_valores_unicos[col] = list(data_filtrada[col].unique())
 
 print("\nCantidad de posibles valores de los atributos:")
 for index, (col, vals) in enumerate(atributos_valores_unicos.items()):
@@ -70,8 +67,8 @@ def priori_suavizado(cantidad, total, total_clases, l=1):
     return numerador / denominador
 
 prioris = {}
-prioris["OTORGADO"] = priori(total_otorgados, total_ejemplos_entrenamiento)
-prioris["RECHAZADO"] = priori(total_rechazados, total_ejemplos_entrenamiento)
+prioris["OTORGADO"] = priori_suavizado(total_otorgados, total_ejemplos_entrenamiento, len(clases))
+prioris["RECHAZADO"] = priori_suavizado(total_rechazados, total_ejemplos_entrenamiento, len(clases))
 
 print("\nProbabilidades a prori:")
 print(f"P(OTROGADO) = {total_otorgados} / {total_ejemplos_entrenamiento}  = {prioris['OTORGADO']:.2f}")
@@ -85,10 +82,10 @@ print(f"P(RECHAZADO) = {total_rechazados} / {total_ejemplos_entrenamiento} = {pr
 
 def verosimilitud_suavizada(df, clase, columna, valor, Mj, l=1):
     #df: dataframe (ejemplos)
-    #clase: la clase a buscar
-    #columna: columna a evaluar
-    #valor: valor que buscamos en el df
-    #Mj: cantidad de valores únicos q
+    #clase: la clase a buscar 
+    #columna: columna a evaluar (campo del atributo)
+    #valor: valor que buscamos en el df : string 
+    #Mj: cantidad de valores únicos : number
     #l: suavizado (1)
   
     # (Xj = xjm ^ Y = Ck) + l
@@ -142,6 +139,7 @@ def predecir_ejemplo_bayes(ejemplo, prioris, verosimilitudes, atributos):
     atributos: Lista con los nombres de las columnas de atributos
     """
     #scores de las clases
+    printear = False
     score_otorgado = prioris['OTORGADO']
     score_rechazado = prioris['RECHAZADO']
     
@@ -159,10 +157,18 @@ def predecir_ejemplo_bayes(ejemplo, prioris, verosimilitudes, atributos):
         score_rechazado *= prob_cond_rechazado
         
     # argmax para determinar la clase con mayor score
-    if score_otorgado >= score_rechazado:
+    if score_otorgado >= score_rechazado: # hollaaa
         prediccion = 'OTORGADO'
+        if printear:
+            print(f"\nPredicción para el ejemplo {ejemplo}:")
+            print(f"Score(OTORGADO) = {score_otorgado:.6f}")
+            print(f"Score(RECHAZADO) = {score_rechazado:.6f}")
     else:
         prediccion = 'RECHAZADO'
+        if printear:
+                print(f"\nPredicción para el ejemplo {ejemplo}:")
+                print(f"Score(OTORGADO) = {score_otorgado:.6f}")
+                print(f"Score(RECHAZADO) = {score_rechazado:.6f}")
         
     # Normalización bayesiana para obtener la probabilidad exacta de 'OTORGADO'
     # P(OTORGADO | x) = Score(OTORGADO) / (Score(OTORGADO) + Score(RECHAZADO))
@@ -172,11 +178,6 @@ def predecir_ejemplo_bayes(ejemplo, prioris, verosimilitudes, atributos):
 
 mostrar_verosimilitudes()
 
-prioris_modelo = {
-    'OTORGADO': prioris['OTORGADO'],
-    'RECHAZADO': prioris['RECHAZADO']
-}
-
 lista_predicciones = []
 probabilidades_test = []
 
@@ -184,7 +185,7 @@ probabilidades_test = []
 for x in set_prueba[atributos].values.tolist():
     prediccion, probabilidad_posicion = predecir_ejemplo_bayes(
         ejemplo=x,
-        prioris=prioris_modelo,
+        prioris=prioris,
         verosimilitudes=verosimilitudes, 
         atributos=atributos
     )
@@ -204,7 +205,7 @@ accuracy = bien / len(set_prueba)
 
 print("TESTEO DEL MODELO")
 
-print("\n Metricas de Naive Bayes en el set de prueba:")
+print("\nMetricas de Naive Bayes en el set de prueba:")
 print(f"Aciertos: {bien} / {len(set_prueba)}")
 print(f"Accuracy en Test: {accuracy * 100:.2f}%")
 
@@ -277,8 +278,8 @@ fpr = matriz['FP'] / (matriz['FP'] + matriz['TN'])
 print(f"Tasa de Falsos Positivos (FPR): {fpr * 100:.2f}%")  
 
 #Curva ROC
-P = valores_reales.count("OTORGADO")
-N = valores_reales.count("RECHAZADO")
+P = matriz['TP'] + matriz['FN']  
+N = matriz['TN'] + matriz['FP']  
 puntos_fpr = [0.0]  # Arrancamos en el punto (0,0) (Umbral u > 1.0) [1]
 puntos_tpr = [0.0]
 umbrales_unicos = sorted(list(set(probabilidades_test)), reverse=True)

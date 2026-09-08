@@ -26,6 +26,11 @@ print(f"Ejemplos de prueba: {len(set_prueba)}")
 
 # FIND-S
 def find_s(X_ejemplos, y_conceptos, concepto_positivo):
+    """
+    X_ejemplos: Set de ejemplos
+    y_conceptos: Set de conceptos (objetivo)
+    concepto_positivo: Concepto positivo a buscar (OTORGADO)
+    """
     # Arranca todo en vacio
     hipotesis = [None] * len(X_ejemplos.columns) #Vacio en todas las caracteristicas
     
@@ -59,6 +64,12 @@ print()
 
 # Predicción en el conjunto de prueba
 def predecir_find_s(hipotesis, X_prueba, campo_positivo, campo_negativo):
+    """
+    hipotesis: Hipótesis obtenida del algoritmo FIND-S
+    X_prueba: Set de prueba (características)
+    campo_positivo: Valor a predecir si coincide con la hipótesis
+    campo_negativo: Valor a predecir si no coincide con la hipótesis
+    """
 
     predicciones = []
 
