@@ -85,23 +85,17 @@ realizar_predicciones()
 # Ejercicio 2
 
 def matriz_confusion(y_real, y_pred):
-
     VP = 0
     VN = 0
     FP = 0
     FN = 0
-
     for real, prediccion in zip(y_real, y_pred):
-
         if real == "OTORGADO" and prediccion == "OTORGADO":
             VP += 1
-
         elif real == "RECHAZADO" and prediccion == "RECHAZADO":
             VN += 1
-
         elif real == "RECHAZADO" and prediccion == "OTORGADO":
             FP += 1
-
         elif real == "OTORGADO" and prediccion == "RECHAZADO":
             FN += 1
 
@@ -114,11 +108,8 @@ print(f"VP: {VP}, VN: {VN}, FP: {FP}, FN: {FN}")
 def calcular_metricas(VP, VN, FP, FN):
 
     accuracy = (VP + VN) / (VP + VN + FP + FN)
-
     recall = VP / (VP + FN)
-
     especificidad = VN / (VN + FP)
-
     precision = VP / (VP + FP)
 
     print("\nMétricas:")
@@ -135,11 +126,8 @@ accuracy, recall, especificidad, precision = calcular_metricas(
 )
 
 def calcular_f1(precision, recall):
-
     f1 = 2 * (precision * recall) / (precision + recall)
-
     print(f"\nF1-score: {f1:.4f}")
-
     return f1
 
 
@@ -147,14 +135,10 @@ f1 = calcular_f1(precision, recall)
 
 
 def calcular_tasas(VP, VN, FP, FN):
-
     TPR = VP / (VP + FN)
-
     FPR = FP / (FP + VN)
-
     print(f"\nTasa de verdaderos positivos (TPR): {TPR:.4f}")
     print(f"Tasa de falsos positivos (FPR): {FPR:.4f}")
-
     return TPR, FPR
 
 
