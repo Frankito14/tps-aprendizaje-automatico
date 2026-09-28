@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import math
 
+# FUNCIONES AUXILIARES
+
 # PROB. PRIORI
 def calcular_prioris(df, columna_objetivo):
     """
@@ -68,9 +70,11 @@ def obtener_clase_mayoritaria(df, columna_objetivo):
 
 # ALGORITMO ID3
 
-def construir_arbol_id3(df, atributos, columna_objetivo):
+def construir_arbol_id3(df, atributos, columna_objetivo,
+                         profundidad_max=None, division_minima=2, ganancia_minima=0.0,
+                         profundidad_actual=0):
     """
-    Genera un arbol de desicion usando el algortimo ID3
+    Genera un árbol de decisión ID3 con soporte para poda.
     """
     clases_unicas = df[columna_objetivo].unique()
 
@@ -80,10 +84,16 @@ def construir_arbol_id3(df, atributos, columna_objetivo):
     if len(atributos) == 0:
         return obtener_clase_mayoritaria(df, columna_objetivo)
 
+    if profundidad_max is not None and profundidad_actual >= profundidad_max:
+        return obtener_clase_mayoritaria(df, columna_objetivo)
+
+    if len(df) < division_minima:
+        return obtener_clase_mayoritaria(df, columna_objetivo)
+
     ganancias = {at: ganancia_informacion(df, at, columna_objetivo) for at in atributos}
     mejor_atributo = max(ganancias, key=ganancias.get)
 
-    if ganancias[mejor_atributo] <= 0:
+    if ganancias[mejor_atributo] <= ganancia_minima:
         return obtener_clase_mayoritaria(df, columna_objetivo)
 
     # Crear arbol
@@ -97,7 +107,11 @@ def construir_arbol_id3(df, atributos, columna_objetivo):
             arbol[mejor_atributo][valor] = obtener_clase_mayoritaria(df, columna_objetivo)
         else:
             arbol[mejor_atributo][valor] = construir_arbol_id3(
-                sub_df, atributos_restantes, columna_objetivo
+                sub_df, atributos_restantes, columna_objetivo,
+                profundidad_max=profundidad_max,
+                division_minima=division_minima,
+                ganancia_minima=ganancia_minima,
+                profundidad_actual=profundidad_actual + 1,
             )
 
     return arbol
@@ -123,7 +137,7 @@ def predecir_ejemplo(arbol, ejemplo, clase_mayoritaria):
 def predecir_dataset(arbol, df_prueba, clase_mayoritaria):
     """
     Genera la lista de predicciones para todo el conjunto de prueba.
-    Retorna una lista de predicciones.
+    Retorna una lista con las predicciones.
     """
     predicciones = []
 
@@ -133,30 +147,31 @@ def predecir_dataset(arbol, df_prueba, clase_mayoritaria):
 
     return predicciones
 
+
 # VISUALIZACIÓN DEL ÁRBOL
- 
+
 def imprimir_arbol(arbol, prefijo="", es_ultimo=True, es_raiz=True):
     """
     Imprime el árbol en consola
     """
     conector = "" if es_raiz else ("└─ " if es_ultimo else "├─ ")
- 
+
     if not isinstance(arbol, dict):
         # Nodo hoja: se imprime la clase final
         print(f"{prefijo}{conector}-> {arbol}")
         return
- 
+
     # Nodo interno: un único atributo como clave
     atributo = list(arbol.keys())[0]
     ramas = arbol[atributo]
- 
+
     if es_raiz:
         print(f"[{atributo}]")
         nuevo_prefijo = ""
     else:
         print(f"{prefijo}{conector}[{atributo}]")
         nuevo_prefijo = prefijo + ("    " if es_ultimo else "│   ")
- 
+
     valores = list(ramas.items())
     for i, (valor, subarbol) in enumerate(valores):
         ultimo = (i == len(valores) - 1)
@@ -164,6 +179,7 @@ def imprimir_arbol(arbol, prefijo="", es_ultimo=True, es_raiz=True):
         print(f"{nuevo_prefijo}{rama_conector}{valor}")
         sub_prefijo = nuevo_prefijo + ("    " if ultimo else "│   ")
         imprimir_arbol(subarbol, prefijo=sub_prefijo, es_ultimo=True, es_raiz=False)
+
 
 
 # METRICAS DE EVALUACIÓN
@@ -212,7 +228,6 @@ def calcular_f1_score(matriz):
     return 2 * (prec * rec) / (prec + rec) if (prec + rec) > 0 else 0.0
 
 
-
 # EJECUCIÓN PRINCIPAL
 
 if __name__ == "__main__":
@@ -238,12 +253,19 @@ if __name__ == "__main__":
     print(f"Set de Entrenamiento (80%): {len(set_entrenamiento)}")
     print(f"Set de Prueba (20%): {len(set_prueba)}")
 
-    # Entrenar el modelo
-    arbol_id3 = construir_arbol_id3(set_entrenamiento, atributos, atributo_concepto)
+    # Hiperparámetros de PREPODA
+    PROFUNDIDAD_MAX = 2
+    DIVISION_MINIMA = 20
+    GANANCIA_MINIMA = 0.01
 
-    print("\nEstructura del Árbol de Decisión ID3 Generado:")
-    imprimir_arbol(arbol_id3)
- 
+    # Entrenar el modelo
+    arbol_id3 = construir_arbol_id3(
+        set_entrenamiento, atributos, atributo_concepto,
+        profundidad_max=PROFUNDIDAD_MAX,
+        division_minima=DIVISION_MINIMA,
+        ganancia_minima=GANANCIA_MINIMA,
+    )
+
     # Clase mayoritaria del SET DE ENTRENAMIENTO (para valores no vistos)
     clase_mayoritaria_train = obtener_clase_mayoritaria(set_entrenamiento, atributo_concepto)
 
@@ -251,9 +273,12 @@ if __name__ == "__main__":
     y_reales = set_prueba[atributo_concepto].tolist()
     y_predichos = predecir_dataset(arbol_id3, set_prueba, clase_mayoritaria_train)
 
+    print("\nEstructura del Árbol de Decisión ID3 Generado:")
+    imprimir_arbol(arbol_id3)
+
     # Metricas de evaluacion
     matriz = calcular_matriz_confusion(y_reales, y_predichos, pos_label='OTORGADO', neg_label='RECHAZADO')
-
+    
     print("\n")
     print("MATRIZ DE CONFUSIÓN (Conjunto de prueba) \n")
     print(f"Verdaderos Positivos (TP): {matriz['TP']}")
