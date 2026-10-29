@@ -29,7 +29,7 @@ def predecir_estudiante(modelo, estudiante, variables_predictoras):
     """
     # Corregido: pasamos los datos como una lista de listas [[...]] para que tenga la forma (1, n) correcta
     X_nuevo = pd.DataFrame([estudiante], columns=variables_predictoras)
-    
+
     # Predecir la clase (0 o 1) y obtener sus probabilidades
     prediccion = modelo.predict(X_nuevo)[0]
     probabilidad = modelo.predict_proba(X_nuevo)[0]
@@ -47,7 +47,7 @@ entrenamiento = datos.iloc[:n_entrenamiento].copy()
 testeo = datos.iloc[n_entrenamiento:].copy()
 
 print("\n")
-print("Regresion Lineal Multiple \n")
+print("Regresión Logística \n")
 print(f"Total de ejemplos: {len(datos)}")
 print(f"Entrenamiento: {len(entrenamiento)} | Prueba: {len(testeo)}\n")
 
@@ -72,6 +72,12 @@ coeficientes = modelo_logistico.coef_[0]
 print("\n")
 print(f"Ecuación del Logit (z) = {intercepto:.4f}", end="")
 for i, var in enumerate(variables_predictoras):
+    print(f" + ({coeficientes[i]:.4f} * x{i+1})", end="")
+print("\n")
+
+print("\n")
+print(f"Ecuación del Logit (z) = {intercepto:.4f}", end="")
+for i, var in enumerate(variables_predictoras):
     print(f" + ({coeficientes[i]:.4f} * {var})", end="")
 print("\n")
 
@@ -92,10 +98,14 @@ print(f"F1-score: {f1:.4f}\n")
 estudiante_ejemplo = [25, 58, 68]  # [Horas de estudio, Porcentaje de asistencia, Calificaciones previas]
 condicion_predicha, probabilidades = predecir_estudiante(modelo_logistico, estudiante_ejemplo, variables_predictoras)
 
+# Ordenar los index de las clases
+idx_aprobado = list(modelo_logistico.classes_).index('Aprobado')
+idx_reprobado = list(modelo_logistico.classes_).index('Reprobado')
+
 print("Predicción de estudiante:")
 for var, valor in zip(variables_predictoras, estudiante_ejemplo):
     print(f"- {var}: {valor}")
 print("\n")
-print(f"Condición Predicha: {'Aprobado (1)' if condicion_predicha == 1 else 'Reprobado (0)'}")
-print(f"Probabilidades -> Reprobado: {probabilidades[0]:.4f} | Aprobado: {probabilidades[1]:.4f}")
+print(f"Condición Predicha: {condicion_predicha} (0: Reprobado, 1: Aprobado)")
+print(f"Probabilidades -> Reprobado: {probabilidades[idx_reprobado]:.4f} | Aprobado: {probabilidades[idx_aprobado]:.4f}")
 print("\n")
